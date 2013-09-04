@@ -1590,7 +1590,8 @@ iperf_print_intermediate(struct iperf_test *test)
     struct iperf_interval_results *irp;
     iperf_size_t bytes = 0;
     double bandwidth;
-    int retransmits = 0;
+    int retransmits = 0, counter = 0;
+    unsigned long rtt = 0, cwnd = 0;
     double start_time, end_time;
     cJSON *json_interval;
     cJSON *json_interval_streams;
@@ -1620,7 +1621,15 @@ iperf_print_intermediate(struct iperf_test *test)
         bytes += irp->bytes_transferred;
 	if (test->sender && test->sender_has_retransmits)
 	    retransmits += irp->this_retrans;
+	if (test->sender && test->sender_has_retransmits) {
+	    rtt += irp->tcpInfo.tcpi_rtt;
+	    cwnd += irp->tcpInfo.tcpi_snd_cwnd;
+	    counter++;
+	}
     }
+    rtt = rtt / counter;
+    cwnd = cwnd / counter;
+
     if (bytes < 0) { /* this can happen if timer goes off just when client exits */
 	iperf_err(test, "error: bytes < 0!");
         return;
@@ -1638,9 +1647,9 @@ iperf_print_intermediate(struct iperf_test *test)
         end_time = timeval_diff(&sp->result->start_time,&irp->interval_end_time);
 	if (test->sender && test->sender_has_retransmits) {
 	    if (test->json_output)
-	        cJSON_AddItemToObject(json_interval, "sum", iperf_json_printf("start: %f  end: %f  seconds: %f  bytes: %d  bits_per_second: %f  retransmits: %d", (double) start_time, (double) end_time, (double) irp->interval_duration, (int64_t) bytes, bandwidth * 8, (int64_t) retransmits));
+	        cJSON_AddItemToObject(json_interval, "sum", iperf_json_printf("start: %f  end: %f  seconds: %f  bytes: %d  bits_per_second: %f  retransmits: %d rtt: %d cwnd %d", (double) start_time, (double) end_time, (double) irp->interval_duration, (int64_t) bytes, bandwidth * 8, (int64_t) retransmits, (int64_t) rtt, (int64_t) cwnd));
 	    else
-		printf(report_sum_bw_retrans_format, start_time, end_time, ubuf, nbuf, retransmits);
+		printf(report_sum_bw_retrans_format, start_time, end_time, ubuf, nbuf, retransmits, rtt, cwnd);
 	} else {
 	    if (test->json_output)
 	        cJSON_AddItemToObject(json_interval, "sum", iperf_json_printf("start: %f  end: %f  seconds: %f  bytes: %d  bits_per_second: %f", (double) start_time, (double) end_time, (double) irp->interval_duration, (int64_t) bytes, bandwidth * 8));
@@ -1863,9 +1872,9 @@ print_interval_results(struct iperf_test *test, struct iperf_stream *sp, cJSON *
     
     if (test->sender && test->sender_has_retransmits) {
 	if (test->json_output)
-	    cJSON_AddItemToArray(json_interval_streams, iperf_json_printf("socket: %d  start: %f  end: %f  seconds: %f  bytes: %d  bits_per_second: %f  retransmits: %d", (int64_t) sp->socket, (double) st, (double) et, (double) irp->interval_duration, (int64_t) irp->bytes_transferred, bandwidth * 8, (int64_t) irp->this_retrans));
+	    cJSON_AddItemToArray(json_interval_streams, iperf_json_printf("socket: %d  start: %f  end: %f  seconds: %f  bytes: %d  bits_per_second: %f  retransmits: %d rtt: %d cwnd: %d", (int64_t) sp->socket, (double) st, (double) et, (double) irp->interval_duration, (int64_t) irp->bytes_transferred, bandwidth * 8, (int64_t) irp->this_retrans, (int64_t) irp->tcpInfo.tcpi_rtt, (int64_t) irp->tcpInfo.tcpi_snd_cwnd));
 	else
-	    printf(report_bw_retrans_format, sp->socket, st, et, ubuf, nbuf, irp->this_retrans);
+	    printf(report_bw_retrans_format, sp->socket, st, et, ubuf, nbuf, irp->this_retrans, irp->tcpInfo.tcpi_rtt, irp->tcpInfo.tcpi_snd_cwnd);
     } else {
 	if (test->json_output)
 	    cJSON_AddItemToArray(json_interval_streams, iperf_json_printf("socket: %d  start: %f  end: %f  seconds: %f  bytes: %d  bits_per_second: %f", (int64_t) sp->socket, (double) st, (double) et, (double) irp->interval_duration, (int64_t) irp->bytes_transferred, bandwidth * 8));
